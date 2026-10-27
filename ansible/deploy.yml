@@ -1,0 +1,59 @@
+---
+- name: Deploy verified release images
+  hosts: application
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify setup has completed
+      ansible.builtin.stat:
+        path: /opt/devsync/runtime.env
+      register: runtime_env
+
+    - name: Require server setup
+      ansible.builtin.assert:
+        that: runtime_env.stat.exists
+        fail_msg: Run ACTION=setup first with the runtime secret-file credential.
+
+    - name: Create isolated staging directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: devsync-
+        path: /opt/devsync
+      register: staging
+
+    - name: Stage and deploy release
+      block:
+        - name: Copy versioned deployment files
+          ansible.builtin.copy:
+            src: "{{ item.src }}"
+            dest: "{{ staging.path }}/{{ item.dest }}"
+            mode: '0600'
+          loop:
+            - {src: '../compose.prod.yml', dest: 'compose.prod.yml'}
+            - {src: '../scripts/deploy.py', dest: 'deploy.py'}
+            - {src: '../.local/candidate.json', dest: 'candidate.json'}
+            - {src: '../postgres-init.sql', dest: 'postgres-init.sql'}
+
+        - name: Log in with pull-only registry credentials
+          ansible.builtin.command:
+            argv: [docker, --config, "{{ staging.path }}/docker", login, --username, "{{ lookup('env', 'REGISTRY_USER') }}", --password-stdin]
+            stdin: "{{ lookup('env', 'REGISTRY_TOKEN') }}"
+          no_log: true
+          changed_when: false
+
+        - name: Deploy under a server-side lock
+          ansible.builtin.command:
+            argv: [python3, "{{ staging.path }}/deploy.py", "{{ staging.path }}"]
+          environment:
+            DOCKER_CONFIG: "{{ staging.path }}/docker"
+          register: deployment
+          changed_when: "'DEPLOYED' in deployment.stdout"
+
+        - name: Show deployment result
+          ansible.builtin.debug:
+            var: deployment.stdout_lines
+      always:
+        - name: Remove staging and temporary registry credentials
+          ansible.builtin.file:
+            path: "{{ staging.path }}"
+            state: absent

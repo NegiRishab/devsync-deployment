@@ -1,0 +1,170 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-devsync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in runtime.env}
+      POSTGRES_DB: ${POSTGRES_DB:-devsync}
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    - ./postgres-init.sql:/docker-entrypoint-initdb.d/01-uuid.sql:ro
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${POSTGRES_USER:-devsync} -d ${POSTGRES_DB:-devsync}
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  mongo:
+    image: mongo:7
+    volumes:
+    - mongo_data:/data/db
+    healthcheck:
+      test:
+      - CMD
+      - mongosh
+      - --quiet
+      - --eval
+      - db.adminCommand('ping').ok
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  backend-migrate:
+    environment:
+      NODE_ENV: local
+      DB_URL: ${DB_URL:?set DB_URL in runtime.env}
+      DB_LOGGING: 'false'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+    image: ${BACKEND_MIGRATION_IMAGE:?release image is required}
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  backend:
+    environment:
+      NODE_ENV: local
+      PORT: '5000'
+      DB_URL: ${DB_URL:?set DB_URL in runtime.env}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      FRONTEND_URL: ${FRONTEND_URL:?set FRONTEND_URL in runtime.env}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in runtime.env}
+      JWT_EXPIRES_IN_HOURS: ${JWT_EXPIRES_IN_HOURS:-24}
+      JWT_REFRESH_EXPIRES_IN_DAYS: ${JWT_REFRESH_EXPIRES_IN_DAYS:-7}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      ELASTIC_EMAIL_API_KEY: ${ELASTIC_EMAIL_API_KEY:-}
+      ELASTIC_EMAIL_FROM: ${ELASTIC_EMAIL_FROM:-}
+      PUBLIC_FRONTEND_URL: ${PUBLIC_FRONTEND_URL:?set PUBLIC_FRONTEND_URL in runtime.env}
+      CHAT_SERVICE_URL: ${CHAT_SERVICE_URL:-http://chat:4000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    image: ${BACKEND_IMAGE:?release image is required}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - fetch('http://127.0.0.1:5000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  chat:
+    environment:
+      PORT: '4000'
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/devsync_chat}
+      MAIN_SERVICE_URL: ${MAIN_SERVICE_URL:-http://backend:5000}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      FRONTEND_URL: ${FRONTEND_URL:?set FRONTEND_URL in runtime.env}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in runtime.env}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    image: ${CHAT_IMAGE:?release image is required}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - fetch('http://127.0.0.1:4000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  frontend:
+    depends_on:
+    - backend
+    - chat
+    image: ${FRONTEND_IMAGE:?release image is required}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -q
+      - --spider
+      - http://127.0.0.1:8080/healthz
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ports:
+    - 80:8080
+volumes:
+  postgres_data: null
+  mongo_data: null

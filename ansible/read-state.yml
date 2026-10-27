@@ -1,0 +1,22 @@
+---
+- name: Read the last successful release before polling GitHub
+  hosts: application
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require exactly one application server
+      ansible.builtin.assert:
+        that: groups['application'] | length == 1
+        fail_msg: This deployment pipeline manages one application server.
+
+    - name: Check for an existing successful release
+      ansible.builtin.stat:
+        path: /opt/devsync/current/release.json
+      register: current_release
+
+    - name: Fetch the non-secret release record
+      ansible.builtin.fetch:
+        src: /opt/devsync/current/release.json
+        dest: "{{ playbook_dir }}/../.local/current.json"
+        flat: true
+      when: current_release.stat.exists
