@@ -33,7 +33,7 @@ pipeline {
             when { expression { params.ACTION == 'deploy' } }
             steps {
                 withCredentials([
-                    sshUserPrivateKey(credentialsId: 'devsync-app-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+                    sshUserPrivateKey(credentialsId: 'app-server-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
                     file(credentialsId: 'devsync-inventory', variable: 'INVENTORY'),
                     file(credentialsId: 'devsync-known-hosts', variable: 'KNOWN_HOSTS')
                 ]) {
@@ -52,7 +52,7 @@ pipeline {
         stage('Resolve successful CI release') {
             when { expression { params.ACTION == 'deploy' } }
             steps {
-                withCredentials([string(credentialsId: 'devsync-github-token', variable: 'GITHUB_TOKEN')]) {
+                withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
                     sh '''
                         set -eu
                         mkdir -p .local
@@ -64,7 +64,7 @@ pipeline {
         stage('Run Ansible over SSH') {
             steps {
                 withCredentials([
-                    sshUserPrivateKey(credentialsId: 'devsync-app-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+                    sshUserPrivateKey(credentialsId: 'app-server-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
                     file(credentialsId: 'devsync-inventory', variable: 'INVENTORY'),
                     file(credentialsId: 'devsync-known-hosts', variable: 'KNOWN_HOSTS')
                 ]) {
@@ -80,7 +80,7 @@ pipeline {
                                 '''
                             }
                         } else {
-                            withCredentials([usernamePassword(credentialsId: 'devsync-dockerhub-pull', usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_TOKEN')]) {
+                            withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_TOKEN')]) {
                                 sh '''
                                     set -eu
                                     export ANSIBLE_PRIVATE_KEY_FILE="$SSH_KEY"

@@ -65,12 +65,12 @@ Under Manage Jenkins -> Credentials, add:
 
 | ID | Type | Value |
 |---|---|---|
-| `devsync-app-ssh` | SSH username with private key | Application server login |
+| `app-server-ssh` | SSH username with private key | Application server login |
 | `devsync-inventory` | Secret file | Completed Ansible inventory |
 | `devsync-known-hosts` | Secret file | Verified SSH host-key entry |
 | `devsync-runtime-env` | Secret file | Completed `runtime.env.example` |
-| `devsync-github-token` | Secret text | Fine-grained token with Actions: read for all three application repos |
-| `devsync-dockerhub-pull` | Username with password | Docker Hub username and read-only access token |
+| `github-token` | Secret text | Fine-grained token with Actions: read for all three application repos |
+| `dockerhub-creds` | Username with password | Docker Hub username and read-only access token |
 
 For a private deployment repository, add a separate Git SCM credential with read
 access and select it when configuring the Jenkins job.
