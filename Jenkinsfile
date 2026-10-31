@@ -56,14 +56,14 @@ stage('Resolve successful CI release') {
         withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
             withEnv([
                 "SERVICE=${params.SERVICE}",
-                "RUN_ID=${params.RUN_ID}"
+                "RELEASE_RUN_ID=${params.RUN_ID ?: ''}"
             ]) {
                 sh '''
                     set -eu
                     mkdir -p .local
                     python3 scripts/fetch_release.py \
                         --service "$SERVICE" \
-                        --run-id "$RUN_ID" \
+                        --run-id "${RELEASE_RUN_ID:-}" \
                         --current .local/current.json \
                         --output .local/candidate.json
                 '''
@@ -71,7 +71,6 @@ stage('Resolve successful CI release') {
         }
     }
 }
-
         stage('Run Ansible over SSH') {
             steps {
                 withCredentials([
